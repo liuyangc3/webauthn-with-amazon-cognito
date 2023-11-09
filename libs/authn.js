@@ -16,16 +16,17 @@
 const express = require('express');
 const router = express.Router();
 const { Fido2Lib } = require('fido2-lib');
-const { coerceToBase64Url, coerceToArrayBuffer } = require('fido2-lib/lib/utils');
+const base64 = require('@hexagon/base64');
+// const { coerceToBase64Url, coerceToArrayBuffer } = require('fido2-lib/lib/utils');
 
 router.use(express.json());
 
 const f2l = new Fido2Lib({
-    timeout: 30*1000*60,
-    //rpId: process.env.HOSTNAME,
-    rpName: "WebAuthn With Cognito",
-    challengeSize: 32,
-    cryptoParams: [-7]
+  timeout: 30 * 1000 * 60,
+  //rpId: process.env.HOSTNAME,
+  rpName: "WebAuthn With Cognito",
+  challengeSize: 32,
+  cryptoParams: [-7]
 });
 
 
@@ -62,23 +63,22 @@ const f2l = new Fido2Lib({
  **/
 router.post('/createCredRequest', async (req, res) => {
   f2l.config.rpId = `${req.get('host')}`;
- 
-  try {
-    
+
     const response = await f2l.attestationOptions();
+    console.log(`response1: `, response);
+
     response.user = {
       displayName: req.body.name,
       id: req.body.username,
       name: req.body.username
     };
     response.challenge = coerceToBase64Url(response.challenge, 'challenge');
-    
     response.excludeCredentials = [];
     response.pubKeyCredParams = [];
     // const params = [-7, -35, -36, -257, -258, -259, -37, -38, -39, -8];
     const params = [-7, -257];
     for (let param of params) {
-      response.pubKeyCredParams.push({type:'public-key', alg: param});
+      response.pubKeyCredParams.push({ type: 'public-key', alg: param });
     }
     const as = {}; // authenticatorSelection
     const aa = req.body.authenticatorSelection.authenticatorAttachment;
@@ -106,10 +106,9 @@ router.post('/createCredRequest', async (req, res) => {
       response.attestation = cp;
     }
 
+    console.log(`response2: `, response);
+
     res.json(response);
-  } catch (e) {
-    res.status(400).send({ error: e });
-  }
 });
 
 
@@ -136,7 +135,7 @@ router.post('/parseCredResponse', async (req, res) => {
     clientAttestationResponse.rawId = coerceToArrayBuffer(req.body.rawId, "rawId");
     clientAttestationResponse.response.clientDataJSON = coerceToArrayBuffer(req.body.response.clientDataJSON, "clientDataJSON");
     clientAttestationResponse.response.attestationObject = coerceToArrayBuffer(req.body.response.attestationObject, "attestationObject");
-    
+
     let origin = `https://${req.get('host')}`;
 
     const attestationExpectations = {
@@ -162,5 +161,70 @@ router.post('/parseCredResponse', async (req, res) => {
   }
 });
 
+
+function coerceToArrayBuffer(buf, name) {
+	if (!name) {
+		throw new TypeError("name not specified in coerceToArrayBuffer");
+	}
+
+	// Handle empty strings
+	if (typeof buf === "string" && buf === "") {
+		buf = new Uint8Array(0);
+
+		// Handle base64url and base64 strings
+	} else if (typeof buf === "string") {
+		// base64 to base64url
+		buf = buf.replace(/\+/g, "-").replace(/\//g, "_").replace("=", "");
+		// base64 to Buffer
+		buf = base64.toArrayBuffer(buf, true);
+	}
+
+	// Extract typed array from Array
+	if (Array.isArray(buf)) {
+		buf = new Uint8Array(buf);
+	}
+
+	// Extract ArrayBuffer from Node buffer
+	if (typeof Buffer !== "undefined" && buf instanceof Buffer) {
+		buf = new Uint8Array(buf);
+		buf = buf.buffer;
+	}
+
+	// Extract arraybuffer from TypedArray
+	if (buf instanceof Uint8Array) {
+		buf = buf.slice(0, buf.byteLength, buf.buffer.byteOffset).buffer;
+	}
+
+	// error if none of the above worked
+	if (!(buf instanceof ArrayBuffer)) {
+		throw new TypeError(`could not coerce '${name}' to ArrayBuffer`);
+	}
+
+	return buf;
+}
+
+function coerceToBase64Url(thing, name) {
+	if (!name) {
+		throw new TypeError("name not specified in coerceToBase64");
+	}
+
+	if (typeof thing === "string") {
+		// Convert from base64 to base64url
+		thing = thing.replace(/\+/g, "-").replace(/\//g, "_").replace(/={0,2}$/g, "");
+	}
+
+	if (typeof thing !== "string") {
+		try {
+			thing = base64.fromArrayBuffer(
+				coerceToArrayBuffer(thing, name),
+				true,
+			);
+		} catch (_err) {
+			throw new Error(`could not coerce '${name}' to string`);
+		}
+	}
+
+	return thing;
+}
 
 module.exports = router;

@@ -11,11 +11,9 @@
     "cookie-parser": "^1.4.6",
     "dotenv": "^16.0.1",
     "express": "^4.18.1",
-    "fido2-lib": "agektmr/fido2-lib#android-compatible3",
+    "fido2-lib": "^3.4.1",
     "hbs": "^4.2.0",
-    "helmet": "^5.1.1"
-  },
-  "engines": {
-    "node": "12.x"
+    "helmet": "^5.1.1",
+    "uuid": "^9.0.1"
   }
 }
